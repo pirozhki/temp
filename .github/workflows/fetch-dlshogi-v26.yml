@@ -38,7 +38,7 @@ jobs:
           SHA="$(curl -fsSL --retry 3 https://api.github.com/repos/TadaoYamaoka/DeepLearningShogi/git/ref/heads/master | jq -r '.object.sha')"
           [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
-          printf 'current_master_commit=%s\\ncurrent_master_archive=dlshogi-master-source.zip\\n' "$SHA" >> SOURCE_PROVENANCE.txt
+          printf 'current_master_commit=%s\ncurrent_master_archive=dlshogi-master-source.zip\n' "$SHA" >> SOURCE_PROVENANCE.txt
 
       - name: Download current official master source
         env:
@@ -87,7 +87,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          sha256sum dlshogi-source-wcsc32.zip dlshogi-wcsc32.zip model-dr2_exhi.zip SOURCE_PROVENANCE.txt MODEL_LICENSE_GATE.txt | tee SHA256SUMS.txt
+          sha256sum dlshogi-master-source.zip dlshogi-source-wcsc32.zip dlshogi-wcsc32.zip model-dr2_exhi.zip SOURCE_PROVENANCE.txt MODEL_LICENSE_GATE.txt | tee SHA256SUMS.txt
           {
             echo '## Download manifest'
             cat SOURCE_PROVENANCE.txt
