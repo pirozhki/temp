@@ -1,0 +1,57 @@
+name: Fetch Open Tsume CC0 tactical dataset
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fetch-open-tsume.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fetch-dataset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Resolve upstream revision
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(curl -fsSL --retry 3 https://api.github.com/repos/tokoroten/edo_era_tsume_shogi/commits/main | jq -r '.sha')"
+          test "${#SHA}" -eq 40
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "Open Tsume commit: $SHA"
+
+      - name: Download and validate CC0 source archive
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 \
+            "https://github.com/tokoroten/edo_era_tsume_shogi/archive/${UPSTREAM_SHA}.zip" \
+            -o open-tsume-source.zip
+          unzip -t open-tsume-source.zip
+          unzip -p open-tsume-source.zip "*/LICENSE-DATA" > LICENSE-DATA
+          grep -qi "CC0 1.0" LICENSE-DATA
+          unzip -p open-tsume-source.zip "*/LICENSE-CODE" > LICENSE-CODE
+          grep -qi "MIT License" LICENSE-CODE
+          printf 'repository=tokoroten/edo_era_tsume_shogi\nbranch=main\ncommit=%s\narchive=open-tsume-source.zip\ndata-license=CC0-1.0\ncode-license=MIT\n' "$UPSTREAM_SHA" > SOURCE_COMMIT.txt
+          sha256sum open-tsume-source.zip LICENSE-DATA LICENSE-CODE | tee SHA256SUMS.txt
+          cat SOURCE_COMMIT.txt
+          cat LICENSE-DATA
+
+      - name: Upload Open Tsume archive and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: open-tsume-cc0-source
+          path: |
+            open-tsume-source.zip
+            SOURCE_COMMIT.txt
+            SHA256SUMS.txt
+            LICENSE-DATA
+            LICENSE-CODE
+          if-no-files-found: error
+          retention-days: 14
