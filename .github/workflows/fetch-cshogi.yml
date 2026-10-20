@@ -1,4 +1,4 @@
-name: Fetch cshogi CPython 3.13 Linux wheel
+name: Fetch cshogi CPython 3.13 Linux wheel and source
 
 on:
   workflow_dispatch:
@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  fetch-wheel:
+  fetch-package:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -19,7 +19,7 @@ jobs:
         with:
           python-version: "3.13"
 
-      - name: Download the exact PyPI wheel
+      - name: Download wheel and matching source distribution
         shell: bash
         run: |
           set -euo pipefail
@@ -34,26 +34,42 @@ jobs:
           EXPECTED="8661623699de6ab873814584d5531232a9002dc2421a446f7ca631e4afba7ae7"
           ACTUAL="$(sha256sum "dist/$WHEEL" | awk '{print $1}')"
           test "$ACTUAL" = "$EXPECTED"
+
+          SDIST_URL="$(python - <<'PY'
+          import json, urllib.request
+          with urllib.request.urlopen("https://pypi.org/pypi/cshogi/1.0.9/json", timeout=20) as response:
+              metadata = json.load(response)
+          print(next(item["url"] for item in metadata["urls"] if item["packagetype"] == "sdist"))
+          PY
+          )"
+          curl -fL --retry 3 "$SDIST_URL" -o dist/cshogi-1.0.9.tar.gz
+          tar -tzf dist/cshogi-1.0.9.tar.gz >/dev/null
+          tar -xOf dist/cshogi-1.0.9.tar.gz --wildcards '*/LICENSE*' >/dev/null
+
           cp "dist/$WHEEL" .
-          printf '%s  %s\n' "$ACTUAL" "$WHEEL" > SHA256SUMS.txt
+          cp dist/cshogi-1.0.9.tar.gz .
+          sha256sum "$WHEEL" cshogi-1.0.9.tar.gz | tee SHA256SUMS.txt
           cat > README-cshogi-artifact.txt <<EOF
           Package: cshogi
           Version: 1.0.9
-          Target: CPython 3.13, Linux x86-64 (glibc 2.24+)
-          Source: PyPI
+          Wheel target: CPython 3.13, Linux x86-64 (glibc 2.24+)
+          Source: PyPI cshogi 1.0.9 source distribution
           Wheel: $WHEEL
-          SHA-256: $ACTUAL
-          Downloaded with pip download --only-binary=:all: --no-deps.
+          Source archive: cshogi-1.0.9.tar.gz
+          Wheel SHA-256: $ACTUAL
+          The cshogi project is GPL-3.0 licensed. The source archive is provided
+          alongside the wheel for corresponding-source and reproducibility purposes.
           EOF
           cat README-cshogi-artifact.txt
           cat SHA256SUMS.txt
 
-      - name: Upload cshogi wheel as workflow artifact
+      - name: Upload cshogi offline package as workflow artifact
         uses: actions/upload-artifact@v4
         with:
-          name: cshogi-wheel-py313-linux-x86_64
+          name: cshogi-offline-package-py313-linux-x86_64
           path: |
             cshogi-1.0.9-cp313-cp313-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+            cshogi-1.0.9.tar.gz
             SHA256SUMS.txt
             README-cshogi-artifact.txt
           if-no-files-found: error
