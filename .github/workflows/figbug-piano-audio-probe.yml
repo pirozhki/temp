@@ -161,6 +161,8 @@ jobs:
                   return 2;
               }
 
+              // Leave headroom: model peaks can exceed full-scale PCM.
+              audio.applyGain(0.35f);
               juce::File file(outputPath);
               file.getParentDirectory().createDirectory();
               juce::WavAudioFormat wav;
