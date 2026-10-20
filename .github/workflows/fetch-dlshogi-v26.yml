@@ -1,0 +1,94 @@
+name: Fetch dlshogi official artifacts for v26 research
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ".github/workflows/fetch-dlshogi-v26.yml"
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  fetch-public-assets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Resolve official source tag to immutable commit
+        id: upstream
+        shell: bash
+        run: |
+          set -euo pipefail
+          REF_JSON="$(curl -fsSL --retry 3 https://api.github.com/repos/TadaoYamaoka/DeepLearningShogi/git/ref/tags/wcsc32)"
+          SHA="$(printf '%s' "$REF_JSON" | jq -r '.object.sha')"
+          TYPE="$(printf '%s' "$REF_JSON" | jq -r '.object.type')"
+          if [[ "$TYPE" == "tag" ]]; then
+            SHA="$(curl -fsSL --retry 3 "https://api.github.com/repos/TadaoYamaoka/DeepLearningShogi/git/tags/$SHA" | jq -r '.object.sha')"
+          fi
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          printf 'repository=TadaoYamaoka/DeepLearningShogi\nrelease_tag=wcsc32\nsource_commit=%s\nrelease_page=https://github.com/TadaoYamaoka/DeepLearningShogi/releases/tag/wcsc32\n' "$SHA" > SOURCE_PROVENANCE.txt
+
+      - name: Download source at pinned commit
+        env:
+          UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "https://github.com/TadaoYamaoka/DeepLearningShogi/archive/${UPSTREAM_SHA}.zip" -o dlshogi-source-wcsc32.zip
+          unzip -t dlshogi-source-wcsc32.zip
+          test "$(stat -c %s dlshogi-source-wcsc32.zip)" -gt 500000
+          printf 'source_archive=dlshogi-source-wcsc32.zip\nsource_sha=%s\n' "$UPSTREAM_SHA" >> SOURCE_PROVENANCE.txt
+
+      - name: Download official engine release archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "https://github.com/TadaoYamaoka/DeepLearningShogi/releases/download/wcsc32/dlshogi-wcsc32.zip" -o dlshogi-wcsc32.zip
+          unzip -t dlshogi-wcsc32.zip
+          test "$(stat -c %s dlshogi-wcsc32.zip)" -gt 1000000
+          echo 'release_asset=dlshogi-wcsc32.zip' >> SOURCE_PROVENANCE.txt
+          echo 'note=Official prebuilt engine archive for Windows; it does not include the DNN model.' >> SOURCE_PROVENANCE.txt
+
+      - name: Download model archive without extracting or accepting terms
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "https://github.com/TadaoYamaoka/DeepLearningShogi/releases/download/dr2_exhi/model-dr2_exhi.zip" -o model-dr2_exhi.zip
+          test "$(stat -c %s model-dr2_exhi.zip)" -gt 10000000
+          echo 'model_archive=model-dr2_exhi.zip' >> SOURCE_PROVENANCE.txt
+          echo 'model_license=https://tadaoyamaoka.hatenablog.com/entry/2021/08/17/000710' >> SOURCE_PROVENANCE.txt
+          echo 'MODEL GATE: encrypted model archive is retained only for checksum/provenance inspection. This workflow does not decrypt, extract, execute, modify, or redistribute the model. User must explicitly confirm agreement to the model-specific license before any use.' > MODEL_LICENSE_GATE.txt
+          echo 'The model license permits free private use, but imposes restrictions for computer-shogi competition use; it forbids direct tournament play, use for extra training or parameter reuse in that context, reverse engineering, modification, and redistribution. It also disallows commercial use.' >> MODEL_LICENSE_GATE.txt
+          echo 'Official license text: https://tadaoyamaoka.hatenablog.com/entry/2021/08/17/000710' >> MODEL_LICENSE_GATE.txt
+
+      - name: Verify and record SHA-256
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha256sum dlshogi-source-wcsc32.zip dlshogi-wcsc32.zip model-dr2_exhi.zip SOURCE_PROVENANCE.txt MODEL_LICENSE_GATE.txt | tee SHA256SUMS.txt
+          {
+            echo '## Download manifest'
+            cat SOURCE_PROVENANCE.txt
+            echo
+            echo '## SHA-256'
+            cat SHA256SUMS.txt
+            echo
+            echo 'The encrypted model archive was not opened or used; see MODEL_LICENSE_GATE.txt.'
+          } > DOWNLOAD_MANIFEST.md
+
+      - name: Upload temporary research artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: dlshogi-v26-official-assets
+          path: |
+            dlshogi-source-wcsc32.zip
+            dlshogi-wcsc32.zip
+            model-dr2_exhi.zip
+            SOURCE_PROVENANCE.txt
+            MODEL_LICENSE_GATE.txt
+            SHA256SUMS.txt
+            DOWNLOAD_MANIFEST.md
+          if-no-files-found: error
+          retention-days: 3
