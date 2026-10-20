@@ -30,6 +30,26 @@ jobs:
           echo "sha=$SHA" >> "$GITHUB_OUTPUT"
           printf 'repository=TadaoYamaoka/DeepLearningShogi\nrelease_tag=wcsc32\nsource_commit=%s\nrelease_page=https://github.com/TadaoYamaoka/DeepLearningShogi/releases/tag/wcsc32\n' "$SHA" > SOURCE_PROVENANCE.txt
 
+      - name: Resolve latest official source commit
+        id: current_source
+        shell: bash
+        run: |
+          set -euo pipefail
+          SHA="$(curl -fsSL --retry 3 https://api.github.com/repos/TadaoYamaoka/DeepLearningShogi/git/ref/heads/master | jq -r '.object.sha')"
+          [[ "$SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          printf 'current_master_commit=%s\\ncurrent_master_archive=dlshogi-master-source.zip\\n' "$SHA" >> SOURCE_PROVENANCE.txt
+
+      - name: Download current official master source
+        env:
+          CURRENT_SHA: ${{ steps.current_source.outputs.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 "https://github.com/TadaoYamaoka/DeepLearningShogi/archive/${CURRENT_SHA}.zip" -o dlshogi-master-source.zip
+          unzip -t dlshogi-master-source.zip
+          test "$(stat -c %s dlshogi-master-source.zip)" -gt 100000
+
       - name: Download source at pinned commit
         env:
           UPSTREAM_SHA: ${{ steps.upstream.outputs.sha }}
@@ -83,6 +103,7 @@ jobs:
         with:
           name: dlshogi-v26-official-assets
           path: |
+            dlshogi-master-source.zip
             dlshogi-source-wcsc32.zip
             dlshogi-wcsc32.zip
             model-dr2_exhi.zip
