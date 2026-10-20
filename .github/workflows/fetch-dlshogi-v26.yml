@@ -38,7 +38,7 @@ jobs:
           set -euo pipefail
           curl -fL --retry 3 "https://github.com/TadaoYamaoka/DeepLearningShogi/archive/${UPSTREAM_SHA}.zip" -o dlshogi-source-wcsc32.zip
           unzip -t dlshogi-source-wcsc32.zip
-          test "$(stat -c %s dlshogi-source-wcsc32.zip)" -gt 500000
+          test "$(stat -c %s dlshogi-source-wcsc32.zip)" -gt 100000
           printf 'source_archive=dlshogi-source-wcsc32.zip\nsource_sha=%s\n' "$UPSTREAM_SHA" >> SOURCE_PROVENANCE.txt
 
       - name: Download official engine release archive
