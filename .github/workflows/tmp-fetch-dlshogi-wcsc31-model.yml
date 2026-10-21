@@ -1,0 +1,56 @@
+name: TEMP fetch dlshogi WCSC31 bundle for model compatibility test
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/tmp-fetch-dlshogi-wcsc31-model.yml"
+permissions:
+  contents: read
+jobs:
+  fetch-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Fetch official WCSC31 release asset and verify archive integrity
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out extracted
+          url="https://github.com/TadaoYamaoka/DeepLearningShogi/releases/download/wcwc31/dlshogi_with_gct_wcsc31.zip"
+          curl --fail --location --retry 3 --retry-delay 2 "$url" -o out/dlshogi_with_gct_wcsc31.zip
+          actual_size="$(stat -c '%s' out/dlshogi_with_gct_wcsc31.zip)"
+          test "$actual_size" = "67065643"
+          unzip -t out/dlshogi_with_gct_wcsc31.zip > out/unzip-test.txt
+          unzip -Z1 out/dlshogi_with_gct_wcsc31.zip > out/archive-members.txt
+          unzip -oq out/dlshogi_with_gct_wcsc31.zip -d extracted
+          find extracted -type f \( -iname '*.onnx' -o -iname '*license*' -o -iname '*readme*' -o -iname '*copying*' \) -printf '%P\n' | sort > out/model-and-notice-files.txt
+          grep -qi 'model-0000225kai.onnx' out/archive-members.txt
+          grep -qi 'dlshogi_onnxruntime.exe' out/archive-members.txt
+          sha256sum out/dlshogi_with_gct_wcsc31.zip > out/SHA256SUMS
+          {
+            echo "source_release=https://github.com/TadaoYamaoka/DeepLearningShogi/releases/tag/wcwc31"
+            echo "asset_url=$url"
+            echo "tag=wcwc31"
+            echo "expected_asset_size_bytes=67065643"
+            echo "actual_size_bytes=$actual_size"
+            echo "archive_entries=$(wc -l < out/archive-members.txt)"
+            echo "archive_integrity=passed"
+            echo "sha256=$(cut -d' ' -f1 out/SHA256SUMS)"
+            echo "verified_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > out/verification-manifest.txt
+          cat out/SHA256SUMS
+          cat out/model-and-notice-files.txt
+          cat out/verification-manifest.txt
+      - name: Upload official release bundle and provenance
+        uses: actions/upload-artifact@v4
+        with:
+          name: temp-dlshogi-wcsc31-bundle
+          path: |
+            out/dlshogi_with_gct_wcsc31.zip
+            out/SHA256SUMS
+            out/archive-members.txt
+            out/unzip-test.txt
+            out/model-and-notice-files.txt
+            out/verification-manifest.txt
+          if-no-files-found: error
+          retention-days: 1
