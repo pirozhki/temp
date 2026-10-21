@@ -1,0 +1,44 @@
+name: TEMP cleanup ONNX Runtime acquisition artifacts
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/tmp-cleanup-onnxruntime-artifacts.yml"
+permissions:
+  actions: write
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Delete only the task-specific Actions artifacts and temporary workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for artifact_id in 12310563548 12310408997; do
+            url="https://api.github.com/repos/$REPOSITORY/actions/artifacts/$artifact_id"
+            code="$(curl -sS -o /tmp/delete-artifact-response.json -w '%{http_code}' -X DELETE \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              -H "X-GitHub-Api-Version: 2022-11-28" "$url")"
+            if [[ "$code" != "204" && "$code" != "404" ]]; then
+              cat /tmp/delete-artifact-response.json
+              echo "unexpected delete status $code for artifact $artifact_id" >&2
+              exit 1
+            fi
+            echo "artifact $artifact_id delete_status=$code"
+          done
+          for path in \
+            ".github/workflows/tmp-fetch-onnxruntime-1.21.0.yml" \
+            ".github/workflows/tmp-cleanup-onnxruntime-artifacts.yml"; do
+            response="$(gh api "repos/$REPOSITORY/contents/$path?ref=main")"
+            sha="$(printf '%s' "$response" | jq -r .sha)"
+            gh api --method DELETE "repos/$REPOSITORY/contents/$path" \
+              -f message="temp: remove task-specific temporary acquisition workflow" \
+              -f sha="$sha" >/dev/null
+            echo "workflow_removed=$path"
+          done
